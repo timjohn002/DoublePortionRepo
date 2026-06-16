@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from "react";
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 const GOOGLE_CLIENT_ID = "310389054450-evbm6r4ai6rmon598ts0iqpp7t7010te.apps.googleusercontent.com";
 const ALLOWED_EMAILS = ["timjohnargota@gmail.com"];
 
