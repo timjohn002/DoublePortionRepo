@@ -1,10 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = "https://ukzwyegrjlcrmkewslrw.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVrend5ZWdyamxjcm1rZXdzbHJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1OTcwMjgsImV4cCI6MjA5NzE3MzAyOH0.I90y23h3M_FD5ttK54DEcoBuwYdu4brJ_8jH1dcD4MM";
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const GOOGLE_CLIENT_ID = "310389054450-evbm6r4ai6rmon598ts0iqpp7t7010te.apps.googleusercontent.com";
 const ALLOWED_EMAILS = ["timjohnargota@gmail.com"];
 
