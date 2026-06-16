@@ -1,20 +1,14 @@
 import { useState, useRef, useEffect } from "react";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const SUPABASE_URL = "https://ukzwyegrjlcrmkewslrw.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVrend5ZWdyamxjcm1rZXdzbHJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1OTcwMjgsImV4cCI6MjA5NzE3MzAyOH0.I90y23h3M_FD5ttK54DEcoBuwYdu4brJ_8jH1dcD4MM";
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const GOOGLE_CLIENT_ID = "310389054450-evbm6r4ai6rmon598ts0iqpp7t7010te.apps.googleusercontent.com";
 const ALLOWED_EMAILS = ["timjohnargota@gmail.com"];
 
 const SOLD_AS_OPTIONS = ["whole cake", "per slice", "per piece", "per box"];
-
-const INITIAL_PRODUCTS = [
-  { id: 1, name: "Velvet Rose Cake", price: 42.0, category: "cake", available: true, emoji: "🎂", image: null, soldAs: "whole cake", description: "Red velvet layers with cream cheese frosting and edible rose petals." },
-  { id: 2, name: "Salted Caramel Brownie", price: 8.5, category: "brownie", available: true, emoji: "🍫", image: null, soldAs: "per piece", description: "Dense fudge brownie swirled with house-made salted caramel." },
-  { id: 3, name: "Lemon Drizzle Cake", price: 36.0, category: "cake", available: true, emoji: "🍋", image: null, soldAs: "whole cake", description: "Zesty lemon sponge with a tangy drizzle glaze and candied peel." },
-  { id: 4, name: "Dark Chocolate Brownie", price: 7.5, category: "brownie", available: true, emoji: "🍫", image: null, soldAs: "per piece", description: "70% dark chocolate brownie — intensely rich, crackly top." },
-  { id: 5, name: "Strawberry Chiffon Cake", price: 44.0, category: "cake", available: true, emoji: "🍓", image: null, soldAs: "per slice", description: "Light chiffon layers with fresh strawberry compote and whipped cream." },
-  { id: 6, name: "Matcha White Chocolate Brownie", price: 9.0, category: "brownie", available: false, emoji: "🍵", image: null, soldAs: "per piece", description: "Japanese matcha brownie with pools of white chocolate." },
-  { id: 7, name: "Earl Grey Honey Cake", price: 40.0, category: "cake", available: true, emoji: "🫖", image: null, soldAs: "whole cake", description: "Earl Grey-infused sponge with lavender honey buttercream." },
-  { id: 8, name: "Espresso Walnut Brownie", price: 8.5, category: "brownie", available: true, emoji: "☕", image: null, soldAs: "per box", description: "Double espresso brownie with toasted walnuts throughout." },
-];
 
 const QR_PLACEHOLDER = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=PayNow%3A%2B6591234567&color=2C1A0E&bgcolor=FDF6EC";
 
@@ -168,6 +162,10 @@ const css = `
   .status-pill { display: inline-block; font-size: 0.72rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 20px; letter-spacing: 0.05em; text-transform: uppercase; }
   .status-pill.available { background: #eaf3de; color: #3b6d11; }
   .status-pill.unavailable { background: #fcebeb; color: #a32d2d; }
+  .loading-state { text-align: center; padding: 4rem 2rem; color: ${P.muted}; font-size: 1rem; }
+  .loading-spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid ${P.light}; border-top-color: ${P.amber}; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 1rem; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .db-error { background: #fcebeb; border: 1px solid #f09595; border-radius: 10px; padding: 1rem 1.25rem; color: #a32d2d; font-size: 0.88rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.6rem; }
 
   /* Edit Modal */
   .modal-overlay { position: fixed; inset: 0; background: rgba(44,26,14,0.45); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 1rem; }
@@ -216,7 +214,7 @@ function ImageUpload({ image, emoji, onChange, onRemove }) {
   );
 }
 
-function EditModal({ product, onSave, onClose }) {
+function EditModal({ product, onSave, onClose, saving }) {
   const [form, setForm] = useState({ ...product });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   return (
@@ -268,8 +266,8 @@ function EditModal({ product, onSave, onClose }) {
         </div>
 
         <div className="modal-actions">
-          <button className="cancel-btn" onClick={onClose}>Cancel</button>
-          <button className="save-btn" onClick={() => onSave(form)}>Save changes</button>
+          <button className="cancel-btn" onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="save-btn" onClick={() => onSave(form)} disabled={saving}>{saving ? "Saving…" : "Save changes"}</button>
         </div>
       </div>
     </div>
@@ -278,7 +276,9 @@ function EditModal({ product, onSave, onClose }) {
 
 export default function App() {
   const [page, setPage] = useState("shop");
-  const [products, setProducts] = useState(INITIAL_PRODUCTS);
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState(null);
   const [cart, setCart] = useState([]);
   const [filter, setFilter] = useState("all");
   const [adminUser, setAdminUser] = useState(null);
@@ -289,8 +289,43 @@ export default function App() {
   const [newProduct, setNewProduct] = useState({ name: "", price: "", category: "cake", emoji: "🎂", image: null, soldAs: "", description: "" });
   const [addedId, setAddedId] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [saving, setSaving] = useState(false);
   const newPhotoRef = useRef();
 
+  // Map Supabase snake_case to camelCase
+  const mapProduct = (row) => ({
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    price: parseFloat(row.price),
+    category: row.category,
+    emoji: row.emoji,
+    image: row.image,
+    soldAs: row.sold_as,
+    available: row.available,
+  });
+
+  // Fetch products from Supabase on mount
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    setProductsLoading(true);
+    setProductsError(null);
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .order("created_at", { ascending: true });
+    if (error) {
+      setProductsError("Could not load products. Please refresh the page.");
+    } else {
+      setProducts(data.map(mapProduct));
+    }
+    setProductsLoading(false);
+  };
+
+  // Google SSO
   useEffect(() => {
     const script = document.createElement("script");
     script.src = "https://accounts.google.com/gsi/client";
@@ -303,10 +338,7 @@ export default function App() {
 
   const initGoogleSignIn = () => {
     if (!window.google) return;
-    window.google.accounts.id.initialize({
-      client_id: GOOGLE_CLIENT_ID,
-      callback: handleGoogleResponse,
-    });
+    window.google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleGoogleResponse });
   };
 
   const handleGoogleSignIn = () => {
@@ -315,7 +347,7 @@ export default function App() {
     setLoginError("");
     window.google.accounts.id.prompt((notification) => {
       if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-        window.google.accounts.oauth2 && renderGoogleButton();
+        renderGoogleButton();
         setLoginLoading(false);
       }
     });
@@ -350,6 +382,7 @@ export default function App() {
     setAdminUser(null);
   };
 
+  // Cart
   const cartCount = cart.reduce((s, i) => s + i.qty, 0);
   const cartTotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
 
@@ -377,19 +410,63 @@ export default function App() {
 
   const handleSubmit = () => { if (validateCheckout()) { setCart([]); setPage("success"); } };
 
-
-  const toggleAvailability = (id) => setProducts(prev => prev.map(p => p.id === id ? { ...p, available: !p.available } : p));
-  const deleteProduct = (id) => setProducts(prev => prev.filter(p => p.id !== id));
-
-  const saveEdit = (updated) => {
-    setProducts(prev => prev.map(p => p.id === updated.id ? updated : p));
-    setEditingProduct(null);
+  // Admin — Supabase CRUD
+  const toggleAvailability = async (id) => {
+    const product = products.find(p => p.id === id);
+    const newVal = !product.available;
+    setProducts(prev => prev.map(p => p.id === id ? { ...p, available: newVal } : p));
+    const { error } = await supabase.from("products").update({ available: newVal }).eq("id", id);
+    if (error) { alert("Failed to update availability. Please try again."); fetchProducts(); }
   };
 
-  const addProduct = () => {
+  const deleteProduct = async (id) => {
+    if (!window.confirm("Delete this product? This cannot be undone.")) return;
+    setProducts(prev => prev.filter(p => p.id !== id));
+    const { error } = await supabase.from("products").delete().eq("id", id);
+    if (error) { alert("Failed to delete product. Please try again."); fetchProducts(); }
+  };
+
+  const saveEdit = async (updated) => {
+    setSaving(true);
+    const { error } = await supabase.from("products").update({
+      name: updated.name,
+      description: updated.description,
+      price: updated.price,
+      category: updated.category,
+      emoji: updated.emoji,
+      image: updated.image,
+      sold_as: updated.soldAs,
+      available: updated.available,
+    }).eq("id", updated.id);
+    setSaving(false);
+    if (error) {
+      alert("Failed to save changes. Please try again.");
+    } else {
+      setProducts(prev => prev.map(p => p.id === updated.id ? updated : p));
+      setEditingProduct(null);
+    }
+  };
+
+  const addProduct = async () => {
     if (!newProduct.name || !newProduct.price) return;
-    setProducts(prev => [...prev, { id: Date.now(), ...newProduct, price: parseFloat(newProduct.price), available: true }]);
-    setNewProduct({ name: "", price: "", category: "cake", emoji: "🎂", image: null, soldAs: "", description: "" });
+    setSaving(true);
+    const { data, error } = await supabase.from("products").insert({
+      name: newProduct.name,
+      description: newProduct.description,
+      price: parseFloat(newProduct.price),
+      category: newProduct.category,
+      emoji: newProduct.emoji,
+      image: newProduct.image,
+      sold_as: newProduct.soldAs,
+      available: true,
+    }).select().single();
+    setSaving(false);
+    if (error) {
+      alert("Failed to add product. Please try again.");
+    } else {
+      setProducts(prev => [...prev, mapProduct(data)]);
+      setNewProduct({ name: "", price: "", category: "cake", emoji: "🎂", image: null, soldAs: "", description: "" });
+    }
   };
 
   const handleNewPhoto = (e) => {
@@ -406,7 +483,7 @@ export default function App() {
     <>
       <style>{css}</style>
 
-      {editingProduct && <EditModal product={editingProduct} onSave={saveEdit} onClose={() => setEditingProduct(null)} />}
+      {editingProduct && <EditModal product={editingProduct} onSave={saveEdit} onClose={() => setEditingProduct(null)} saving={saving} />}
 
       <nav className="nav">
         <div className="nav-brand">Double Portion<span>· Cakes & Brownies</span></div>
@@ -444,7 +521,11 @@ export default function App() {
             ))}
           </div>
           <div className="product-grid">
-            {visibleProducts.map(product => (
+            {productsLoading
+              ? <div className="loading-state" style={{ gridColumn: "1/-1" }}><div className="loading-spinner"></div><p>Loading products…</p></div>
+              : productsError
+              ? <div className="db-error" style={{ gridColumn: "1/-1" }}>⚠️ {productsError}</div>
+              : visibleProducts.map(product => (
               <div key={product.id} className={`product-card ${!product.available ? "unavailable" : ""}`}>
                 <div className="product-img">
                   {product.image ? <img src={product.image} alt={product.name} /> : product.emoji}
@@ -599,6 +680,8 @@ export default function App() {
                 </div>
               </div>
 
+              {productsError && <div className="db-error">⚠️ {productsError} <button className="edit-btn" style={{ marginLeft: "auto" }} onClick={fetchProducts}>Retry</button></div>}
+
               <table className="admin-table">
                 <thead>
                   <tr>
@@ -612,7 +695,9 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {products.map(product => (
+                  {productsLoading
+                    ? <tr><td colSpan="7" style={{ textAlign: "center", padding: "2rem", color: P.muted }}><div className="loading-spinner" style={{ margin: "0 auto 0.5rem" }}></div><div>Loading…</div></td></tr>
+                    : products.map(product => (
                     <tr key={product.id}>
                       <td>
                         <div className="admin-thumb">
@@ -697,7 +782,7 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-                <button className="add-product-btn" onClick={addProduct}>+ Add Product</button>
+                <button className="add-product-btn" onClick={addProduct} disabled={saving}>{saving ? "Adding…" : "+ Add Product"}</button>
               </div>
             </div>
           )}
